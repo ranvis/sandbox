@@ -1,0 +1,14 @@
+// vim:ft=javascript
+
+ARG_ENABLE("cbor", "enable cbor support", "no");
+
+(function () {
+
+	if (PHP_CBOR == "no") {
+		return;
+	}
+
+	var src = 'cbor.c'.replace(/\//g, '\\'); /* path sep must be \ */
+	EXTENSION("cbor", src, PHP_CBOR_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1 /W4 /wd4100");
+
+})();

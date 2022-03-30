@@ -1,0 +1,19 @@
+# @author SATO Kentaro
+# @license BSD-2-Clause
+
+name: list commands
+
+on:
+  push:
+    branches: [master]
+    tags: ['v[0-9]*']
+
+jobs:
+  build-ext:
+    runs-on: windows-2022
+
+    steps:
+      - name: test
+        shell: cmd
+        run: |
+          where *.exe

@@ -1,0 +1,3 @@
+[submodule "libcbor"]
+	path = libcbor
+	url = https://github.com/ranvis/libcbor.git
