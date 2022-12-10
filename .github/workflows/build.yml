@@ -26,16 +26,19 @@ jobs:
         shell: cmd
         run: |
           set arcName=arcnametest.zip
-          echo lo_name=%arcName% >> $GITHUB_OUTPUT
-          echo UP_NAME=%arcName% >> $GITHUB_OUTPUT
+          echo "lo_name=%arcName%" >> $GITHUB_OUTPUT
+          echo "UP_NAME=%arcName%" >> $GITHUB_OUTPUT
           echo ::set-output name=ob_name::%arcName%
 
       - name: Release
         shell: cmd
         run: |
+          echo lo_name
           echo ${{steps.archive.outputs.lo_name}}
           echo ${{steps.archive.outputs.LO_NAME}}
+          echo up_name
           echo ${{steps.archive.outputs.up_name}}
           echo ${{steps.archive.outputs.UP_NAME}}
+          echo ob_name
           echo ${{steps.archive.outputs.ob_name}}
           echo ${{steps.archive.outputs.OB_NAME}}
