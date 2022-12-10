@@ -25,23 +25,29 @@ jobs:
         id: archive
         shell: cmd
         run: |
-          set arcName=arcnametest.zip
-          echo lo_name=%arcName%>> %GITHUB_OUTPUT%
-          echo UP_NAME=%arcName%>> %GITHUB_OUTPUT%
-          echo co_name=%arcName%>> %GITHUB_OUTPUT%
-          echo ::set-output name=ob_name::%arcName%
-          echo %GITHUB_OUTPUT%
-          type %GITHUB_OUTPUT%
+          set arcName=sandbox.zip
+          #set files=build\ext\php_cbor.dll src\README.md src\LICENSE
+          #zip -j9 %arcName% %files%
+          7z a ${{github.workspace}}\%arcName% README.md
+          echo arc_name=%arcName%>> %GITHUB_OUTPUT%
 
-      - name: Release
+      - name: pre
+        id: pre
         shell: cmd
         run: |
-          echo 
-          echo lo_name=${{steps.archive.outputs.lo_name}}
-          echo LO_NAME=${{steps.archive.outputs.LO_NAME}}
-          
-          echo up_name=${{steps.archive.outputs.up_name}}
-          echo UP_NAME=${{steps.archive.outputs.UP_NAME}}
-          
-          echo ob_name=${{steps.archive.outputs.ob_name}}
-          echo OB_NAME=${{steps.archive.outputs.OB_NAME}}
+          echo name=${{steps.archive.outputs.arc_name}}
+          dir ${{steps.archive.outputs.arc_name}}
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          #draft: true
+          #prerelease: true
+          files: ${{github.workspace}}\${{steps.archive.outputs.arc_name}}
+
+      - name: post
+        id: post
+        shell: cmd
+        run: |
+          echo name=${{steps.archive.outputs.arc_name}}
+          dir ${{steps.archive.outputs.arc_name}}
