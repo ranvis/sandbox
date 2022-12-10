@@ -1,0 +1,41 @@
+# @author SATO Kentaro
+# @license BSD-2-Clause
+
+name: Build and release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [master]
+    tags: ['v[0-9]*']
+    paths-ignore:
+      - .*
+      - '*[A-Z]'
+      - '*.md'
+      - '*.phpt'
+
+jobs:
+  build-ext:
+    runs-on: windows-2022
+
+    steps:
+      - name: Archive
+        id: archive
+        shell: cmd
+        run: |
+          set arcName=arcnametest.zip
+          echo lo_name=%arcName% >> $GITHUB_OUTPUT
+          echo UP_NAME=%arcName% >> $GITHUB_OUTPUT
+          echo ::set-output name=ob_name::%arcName%
+
+      - name: Release
+        shell: cmd
+        run: |
+          echo ${{steps.archive.outputs.lo_name}}
+          echo ${{steps.archive.outputs.LO_NAME}}
+          echo ${{steps.archive.outputs.up_name}}
+          echo ${{steps.archive.outputs.UP_NAME}}
+          echo ${{steps.archive.outputs.ob_name}}
+          echo ${{steps.archive.outputs.OB_NAME}}
