@@ -26,8 +26,7 @@ jobs:
         shell: cmd
         run: |
           set arcName=sandbox.zip
-          #set files=build\ext\php_cbor.dll src\README.md src\LICENSE
-          #zip -j9 %arcName% %files%
+          echo file>README.md
           7z a ${{github.workspace}}\%arcName% README.md
           echo arc_name=%arcName%>> %GITHUB_OUTPUT%
 
