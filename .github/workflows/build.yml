@@ -1,0 +1,195 @@
+# @author SATO Kentaro
+# @license BSD-2-Clause
+
+name: Build and release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [master]
+    tags: ['v[0-9]*']
+    paths-ignore:
+      - .*
+      - '*[A-Z]'
+      - '*.md'
+      - '*.phpt'
+
+env:
+  basename: php_cbor
+
+jobs:
+  build-ext:
+    runs-on: windows-2022
+    if: github.ref_type == 'tag' || !startsWith(github.event.head_commit.message, 'Version ')
+
+    strategy:
+      max-parallel: 10
+      matrix:
+        isa: [ x64]
+        #isa: [x86, x64]
+        ts: [nts, ts]
+        php_ver: ['8.4']
+        #php_ver: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+
+    steps:
+      - name: Resolve VC
+        id: res_vc
+        uses: ranvis/setup-php-sdk/vc-ver@mod2
+        with:
+          php_version: ${{ matrix.php_ver }}
+
+      - name: Prepare names
+        shell: pwsh
+        run: |
+          $typeId = "${{ matrix.php_ver }}-${{ matrix.ts }}-${{ steps.res_vc.outputs.vc }}-${{ matrix.isa }}"
+          "TYPE_ID=$typeId" >> $env:GITHUB_ENV
+          $key = "win-php-$typeId"
+          "PHPSDK_CACHE_KEY=$key" >> $env:GITHUB_ENV
+          $name = "${{ env.basename }}-${{ github.ref_name }}-$typeId"
+          "ARTIFACT_NAME=$name" >> $env:GITHUB_ENV
+
+      - name: Restore PHP SDK from cache
+        id: cache-phpsdk
+        uses: actions/cache/restore@v4
+        with:
+          # php-sdk may better be downloaded from GitHub directly
+          path: |
+            php-bin
+            php-dev
+          key: ${{ env.PHPSDK_CACHE_KEY }}
+
+      - name: Set up PHP SDK # also set up PATH
+        id: get-sdk
+        uses: php/setup-php-sdk@e2ce1c294f272ed93e8083f14649f5adadf93788 # ~2026-01-09
+        with:
+          version: ${{ matrix.php_ver }}
+          ts: ${{ matrix.ts }}
+          arch: ${{ matrix.isa }}
+
+      - name: Save PHP SDK cache
+        if: steps.cache-phpsdk.outputs.cache-hit != 'true' && steps.get-sdk.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            php-bin
+            php-dev
+          key: ${{ env.PHPSDK_CACHE_KEY }}
+
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          path: repo
+
+      - name: Build
+        shell: cmd
+        run: |
+          cd repo
+
+          echo ::group::Prepare
+          set GITHUB_WORKSPACE=${{ github.workspace }}
+          set TARGET_ISA=${{ matrix.isa }}
+          call .github\scripts\setup-env.bat
+          echo ::endgroup::
+
+          echo ::group::Configure
+          set "BIN_PREFIX=${{ steps.get-sdk.outputs.prefix }}"
+          echo PHP_BIN_PREFIX=%BIN_PREFIX%>> %GITHUB_ENV%
+          call phpize
+          call configure.bat --with-prefix=%BIN_PREFIX% --enable-cbor
+          perl -pi .\msvc_mod_make.pl Makefile
+          echo ::endgroup::
+
+          echo ::group::Make
+          nmake /nologo
+          echo ::endgroup::
+
+          echo ::group::Install
+          nmake /n /nologo install
+          nmake /nologo install
+          echo ::endgroup::
+
+          echo ::group::Miscellaneous
+          REM Remove placeholders in changelog
+          perl -pi -e "$_ = '' if (/^\[Unreleased\]/../^-?$/)" CHANGELOG.md
+          dos2unix CHANGELOG.md
+          echo ::endgroup::
+
+      - name: Archive
+        id: archive
+        shell: cmd
+        run: |
+          set "BIN_PREFIX=${{ env.PHP_BIN_PREFIX }}"
+          set arcName=${{ env.ARTIFACT_NAME }}.zip
+          REM set files=%BIN_PREFIX%\ext\php_cbor.dll repo\README.md repo\LICENSE
+          REM zip -j9 %arcName% %files%
+          cd ${{ github.workspace }}\%BIN_PREFIX%\ext
+          7z a ${{ github.workspace }}\%arcName% php_cbor.dll
+          cd ${{ github.workspace }}\repo
+          7z a ${{ github.workspace }}\%arcName% CHANGELOG.md LICENSE README.md stubs
+          echo arc_name=%arcName%>> %GITHUB_OUTPUT%
+
+      - name: Upload preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}-preview
+          path: |
+            ${{ steps.archive.outputs.arc_name }}
+            ${{ env.PHP_BIN_PREFIX }}/ext/php_cbor.dll
+            repo/CHANGELOG.md
+            repo/LICENSE
+            repo/README.md
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # ~2022-11-21
+        with:
+          #draft: true
+          #prerelease: true
+          files: ${{ steps.archive.outputs.arc_name }}
+
+      - name: Run tests
+        id: test
+        continue-on-error: true
+        shell: cmd
+        run: |
+          cd repo
+
+          echo ::group::Prepare
+          set GITHUB_WORKSPACE=${{ github.workspace }}
+          set TARGET_ISA=${{ matrix.isa }}
+          call .github\scripts\setup-env.bat
+          echo ::endgroup::
+
+          echo ::group::Tests
+          nmake test > ..\test_output.log 2>&1
+          echo ::endgroup::
+
+          echo ::group::Test output
+          type ..\test_output.log
+          echo ::endgroup::
+
+          echo ::group::Failed tests
+          if exist tests\*.log (
+            type tests\*.log
+          ) else (
+            echo No failures
+          )
+          echo ::endgroup::
+
+      - name: Save tests result
+        if: always()
+        uses: ranvis/gh-actions-php/save-result@v1
+        with:
+          id: "${{ env.TYPE_ID }}"
+          outcome: "${{ steps.test.outcome }}"
+          test-log: test_output.log
+
+  summary:
+    needs: build-ext
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summarize
+        uses: ranvis/gh-actions-php/summarize-results@v1
