@@ -18,6 +18,7 @@ on:
 
 env:
   basename: php_cbor
+  configure_args: --enable-cbor
 
 jobs:
   build-ext:
@@ -27,11 +28,9 @@ jobs:
     strategy:
       max-parallel: 10
       matrix:
-        isa: [ x64]
-        #isa: [x86, x64]
+        isa: [x86, x64]
         ts: [nts, ts]
-        php_ver: ['8.4']
-        #php_ver: ['8.0', '8.1', '8.2', '8.3', '8.4', '8.5']
+        php_ver: ['8.3']
 
     steps:
       - name: Resolve VC
@@ -49,6 +48,8 @@ jobs:
           "PHPSDK_CACHE_KEY=$key" >> $env:GITHUB_ENV
           $name = "${{ env.basename }}-${{ github.ref_name }}-$typeId"
           "ARTIFACT_NAME=$name" >> $env:GITHUB_ENV
+          "GH_WORKSPACE=${{ github.workspace }}" >> $env:GITHUB_ENV
+          "TARGET_ISA=${{ matrix.isa }}" >> $env:GITHUB_ENV
 
       - name: Restore PHP SDK from cache
         id: cache-phpsdk
@@ -85,50 +86,18 @@ jobs:
       - name: Build
         shell: cmd
         run: |
+          set "PHP_DIR=${{ steps.get-sdk.outputs.prefix }}"
+          echo PHP_DIR=%PHP_DIR%>> %GITHUB_ENV%
           cd repo
-
-          echo ::group::Prepare
-          set GITHUB_WORKSPACE=${{ github.workspace }}
-          set TARGET_ISA=${{ matrix.isa }}
           call .github\scripts\setup-env.bat
-          echo ::endgroup::
-
-          echo ::group::Configure
-          set "BIN_PREFIX=${{ steps.get-sdk.outputs.prefix }}"
-          echo PHP_BIN_PREFIX=%BIN_PREFIX%>> %GITHUB_ENV%
-          call phpize
-          call configure.bat --with-prefix=%BIN_PREFIX% --enable-cbor
-          perl -pi .\msvc_mod_make.pl Makefile
-          echo ::endgroup::
-
-          echo ::group::Make
-          nmake /nologo
-          echo ::endgroup::
-
-          echo ::group::Install
-          nmake /n /nologo install
-          nmake /nologo install
-          echo ::endgroup::
-
-          echo ::group::Miscellaneous
-          REM Remove placeholders in changelog
-          perl -pi -e "$_ = '' if (/^\[Unreleased\]/../^-?$/)" CHANGELOG.md
-          dos2unix CHANGELOG.md
-          echo ::endgroup::
+          call .github\scripts\build.bat
 
       - name: Archive
         id: archive
         shell: cmd
         run: |
-          set "BIN_PREFIX=${{ env.PHP_BIN_PREFIX }}"
-          set arcName=${{ env.ARTIFACT_NAME }}.zip
-          REM set files=%BIN_PREFIX%\ext\php_cbor.dll repo\README.md repo\LICENSE
-          REM zip -j9 %arcName% %files%
-          cd ${{ github.workspace }}\%BIN_PREFIX%\ext
-          7z a ${{ github.workspace }}\%arcName% php_cbor.dll
-          cd ${{ github.workspace }}\repo
-          7z a ${{ github.workspace }}\%arcName% CHANGELOG.md LICENSE README.md stubs
-          echo arc_name=%arcName%>> %GITHUB_OUTPUT%
+          set "ARC_NAME=${{ env.ARTIFACT_NAME }}.zip"
+          call .github\scripts\archive.bat
 
       - name: Upload preview
         uses: actions/upload-artifact@v4
@@ -136,7 +105,7 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}-preview
           path: |
             ${{ steps.archive.outputs.arc_name }}
-            ${{ env.PHP_BIN_PREFIX }}/ext/php_cbor.dll
+            ${{ env.PHP_DIR }}/ext/php_cbor.dll
             repo/CHANGELOG.md
             repo/LICENSE
             repo/README.md
@@ -155,28 +124,8 @@ jobs:
         shell: cmd
         run: |
           cd repo
-
-          echo ::group::Prepare
-          set GITHUB_WORKSPACE=${{ github.workspace }}
-          set TARGET_ISA=${{ matrix.isa }}
           call .github\scripts\setup-env.bat
-          echo ::endgroup::
-
-          echo ::group::Tests
-          nmake test > ..\test_output.log 2>&1
-          echo ::endgroup::
-
-          echo ::group::Test output
-          type ..\test_output.log
-          echo ::endgroup::
-
-          echo ::group::Failed tests
-          if exist tests\*.log (
-            type tests\*.log
-          ) else (
-            echo No failures
-          )
-          echo ::endgroup::
+          call .github\scripts\run-tests.bat
 
       - name: Save tests result
         if: always()
