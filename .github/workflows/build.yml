@@ -96,11 +96,8 @@ jobs:
         id: archive
         shell: cmd
         run: |
+          cd repo
           set "ARC_NAME=${{ env.ARTIFACT_NAME }}.zip"
-          echo "%CD%"
-          dir 
-          dir .github
-          if not exist ".github\scripts\archive.bat" echo no arc script
           call .github\scripts\archive.bat
 
       - name: Upload preview

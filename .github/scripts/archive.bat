@@ -1,5 +1,3 @@
-@echo on
-
 if "%GH_WORKSPACE%" == "" (
 	echo GH_WORKSPACE not set
 	exit /b 1
